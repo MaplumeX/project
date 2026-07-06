@@ -367,9 +367,7 @@ module pipelined_hardwired_controller (
                                 LPC = 1'b1;
                                 ABUS = 1'b1;
                                 M = 1'b1;
-                                S[3] = 1'b1;
-                                S[2] = 1'b1;
-                                S[1] = 1'b1;
+                                S = 4'b1111;
                                 LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：跳转后继续取下一条指令。
@@ -378,53 +376,54 @@ module pipelined_hardwired_controller (
                             end
                         end
                         4'b1010: begin // OUT：将源寄存器内容经 ALU/ABUS 输出到外部总线。
-                            if (W1) begin // 第 1 拍先更新 PC/IR，准备下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
-                            if (W2) begin // 第 2 拍把源寄存器内容经 ALU 送到 ABUS。
+                            if (W1) begin // 长周期第 1 拍：把源寄存器内容经 ALU 送到 ABUS。
                                 ABUS = 1'b1;
                                 M = 1'b1;
-                                S[3] = 1'b1;
-                                S[1] = 1'b1;
+                                S = 4'b1010;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin // 长周期第 2 拍：取下一条指令。
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                             end
                         end
                         4'b1011: begin // MOV：源寄存器经 ABUS 写回目的寄存器。
-                            if (W1) begin // 第 1 拍先更新 PC/IR，准备下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
-                            if (W2) begin // 第 2 拍把源寄存器内容经 ABUS 写入目的寄存器。
+                            if (W1) begin // 长周期第 1 拍：把源寄存器内容经 ABUS 写入目的寄存器。
                                 DRW = 1'b1;
                                 ABUS = 1'b1;
                                 M = 1'b1;
-                                S[3] = 1'b1;
-                                S[1] = 1'b1;
+                                S = 4'b1010;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin // 长周期第 2 拍：取下一条指令。
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                             end
                         end
                         4'b1100: begin // CMP：执行减法比较，只更新 Z/C，不写回寄存器。
-                            if (W1) begin // 第 1 拍先更新 PC/IR，准备下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
-                            if (W2) begin // 第 2 拍执行减法比较，只锁存标志位。
+                            if (W1) begin // 长周期第 1 拍：执行减法比较，只锁存标志位。
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
-                                S[2] = 1'b1;
-                                S[1] = 1'b1;
+                                S = 4'b0110;
+                                LONG = 1'b1;
                             end
-                        end
-                        4'b1101: begin // NOT：执行按位取反并写回寄存器。
-                            if (W1) begin // 第 1 拍先更新 PC/IR，准备下一条指令。
+                            if (W2) begin // 长周期第 2 拍：取下一条指令。
                                 PCINC = 1'b1;
                                 LIR = 1'b1;
                             end
-                            if (W2) begin // 第 2 拍执行取反，结果经 ABUS 写回寄存器。
+                        end
+                        4'b1101: begin // NOT：执行按位取反并写回寄存器。
+                            if (W1) begin // 长周期第 1 拍：执行取反，结果经 ABUS 写回寄存器。
                                 DRW = 1'b1;
                                 ABUS = 1'b1;
-                                LDC = 1'b1;
+                                LDZ = 1'b1;
                                 M = 1'b1;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin // 长周期第 2 拍：取下一条指令。
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                             end
                         end
                         4'b1110: begin // STP：停机，拉高 STOP 保持暂停状态。
@@ -433,17 +432,18 @@ module pipelined_hardwired_controller (
                             end
                         end
                         4'b1111: begin // DEC：执行自减并写回寄存器，同时更新 Z/C。
-                            if (W1) begin // 第 1 拍先更新 PC/IR，准备下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
-                            if (W2) begin // 第 2 拍执行自减，结果写回寄存器并更新标志位。
+                            if (W1) begin // 长周期第 1 拍：执行自减，结果写回寄存器并更新标志位。
                                 DRW = 1'b1;
                                 CIN = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
                                 S = 4'b1111;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin // 长周期第 2 拍：取下一条指令。
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                             end
                         end
                     endcase
