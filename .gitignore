@@ -1,0 +1,31 @@
+# Quartus generated directories
+/db/
+/incremental_db/
+
+# Quartus reports and summaries
+*.rpt
+*.summary
+*.smsg
+
+# Quartus generated output files
+*.done
+*.pin
+*.pof
+*.sof
+*.jam
+*.jic
+
+# Quartus workspace and temporary files
+*.qws
+*.bak
+*.qmsg
+*.ddb
+*.cdb
+*.hdb
+*.rdb
+*.sci
+*.eco
+
+# Simulation and waveform output
+*.vcd
+*.vwf
