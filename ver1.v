@@ -1,36 +1,36 @@
 module ver1 (
-        //����˿�
-        input wire [2:0] SWC_SWB_SWA,      // ģʽѡ���ź�
-        input wire [3:0] IR7_IR4,          // ָ��Ĵ�����4λ
-        input wire CLR,                    // ��λ�ź� (����Ч)
-        input wire T3,                     // ʱ���ź� T3 (��ΪST0��ʱ��)
-        input wire W1, W2, W3,             // ΢ָ��ʱ���ź�
-        input wire C, Z,                   // ״̬��־����λC����Z
-        //����˿�
-        output wire SELCTL,                 // ѡ������ź�
-        output wire ABUS,                   // ����ALU�����Ƿ������������
-        output wire SBUS,                   // �����ֶ����������Ƿ������������
-        output wire MBUS,                   // ����˫�˿ڴ洢���������͵���������
-        output wire M,CIN,                  // M�ǿ���ALU���߼����㻹���������� CIN��������S���M��Ӧ�Ĳ������н�λ���������޽�λ����
-        output wire DRW,                    // ���ƼĴ���д���ź�
-        output wire LDZ,                    // ��Ϊ1����������Ϊ0ʱ��ZΪ1������Ϊ0����ZΪ0
-        output wire LDC,                    // ��Ϊ1����������������λʱ��CΪ1�����޽�λ����CΪ0
-        output wire MEMW,                   // ���ƴ洢��˫�˿�RAMд���źţ�Ϊ1ʱ�������е�ֵд�봢����
-        output wire ARINC,                  // ���Ƶ�ַ�Ĵ���AR��ֵ��1�ź�
-        output wire PCINC,                  // ���Ƶ�ַ�Ĵ���PC��ֵ��1�ź�
-        output wire PCADD,                  // ����PC��ָ���ַ�ź�
-        output wire LPC,                    // ���ƽ���������������д��PC�Ĵ���
-        output wire LAR,                    // ���ƽ���������������д��AR�Ĵ���
-        output wire LIR,                    // ���ƽ���������������д��IR�Ĵ���
-        output wire STOP,                   // ֹͣ�ź�
-        output wire SHORT,                  // ����ʱ�ź�
-        output wire LONG,                   // ����ʱ�ź�
-        output wire [3:0] S, SEL            // S����ALU������ͬ�ĺ��� SEL���� 2 - 4 ������
+        // 输入端口
+        input wire [2:0] SWC_SWB_SWA,      // 模式选择信号
+        input wire [3:0] IR7_IR4,          // 指令寄存器高 4 位
+        input wire CLR,                    // 复位信号，低电平有效
+        input wire T3,                     // 时序信号 T3，用于更新状态
+        input wire W1, W2, W3,             // 微指令节拍信号
+        input wire C, Z,                   // 状态标志：进位标志 C、零标志 Z
+        // 输出端口
+        output reg SELCTL,                 // 选择控制信号
+        output reg ABUS,                   // 控制 ALU 输出送总线
+        output reg SBUS,                   // 控制开关输入送总线
+        output reg MBUS,                   // 控制存储器输出送总线
+        output reg M,CIN,                  // M 控制 ALU 运算类型，CIN 为进位输入
+        output reg DRW,                    // 寄存器写控制信号
+        output reg LDZ,                    // 零标志写控制信号
+        output reg LDC,                    // 进位标志写控制信号
+        output reg MEMW,                   // 存储器写控制信号
+        output reg ARINC,                  // 地址寄存器 AR 加 1 控制信号
+        output reg PCINC,                  // 程序计数器 PC 加 1 控制信号
+        output reg PCADD,                  // PC 相对寻址加法控制信号
+        output reg LPC,                    // PC 装载控制信号
+        output reg LAR,                    // AR 装载控制信号
+        output reg LIR,                    // IR 装载控制信号
+        output reg STOP,                   // 停机/暂停控制信号
+        output reg SHORT,                  // 短周期控制信号
+        output reg LONG,                   // 长周期控制信号
+        output reg [3:0] S, SEL            // S 为 ALU 功能选择，SEL 为寄存器选择
     );
-    //״̬��ʶ
+    // 状态标志
     reg ST0;
     wire SST0;
-    //���ֻ���״̬
+    // 工作模式状态
     reg [2:0] Q; 
     wire WRITE_REG;
     wire READ_REG;
@@ -38,7 +38,7 @@ module ver1 (
     wire READ_MEM;
     wire WRITE_MEM;
 
-    //ԭ����ָ������
+    // 原有指令译码
     wire NOP;
     wire ADD;
     wire SUB;
@@ -50,7 +50,7 @@ module ver1 (
     wire JZ;
     wire JMP;
     wire STP;
-    //���ӵ�ָ��
+    // 新增指令译码
     wire OUT;
     wire MOV;
     wire CMP;
@@ -60,21 +60,21 @@ module ver1 (
 	always @(negedge T3)
 	begin 
 			case  (SWC_SWB_SWA)
-				3'b100:  Q=100;
-				3'b011:  Q=011;
-				3'b000:  Q=000;
-				3'b010:  Q=010;
-				3'b001:  Q=001;
+				3'b100:  Q=3'b100;
+				3'b011:  Q=3'b011;
+				3'b000:  Q=3'b000;
+				3'b010:  Q=3'b010;
+				3'b001:  Q=3'b001;
 			    default:
-			             Q=111; 
+			             Q=3'b111; 
 			 endcase 
 			     
 	end			
     assign WRITE_REG = (Q == 3'b100) ? 1: 0;
-    assign READ_REG = (Q == 3'b011) ? 1: 0; // ��ȡ�Ĵ���ģʽ
-    assign INS_FETCH = (Q == 3'b000) ? 1: 0; // ָ��ȡָģʽ
-    assign READ_MEM = (Q == 3'b010) ? 1: 0; // ��ȡ�洢��ģʽ
-    assign WRITE_MEM = (Q == 3'b001) ? 1: 0; // д��洢��ģʽ
+    assign READ_REG = (Q == 3'b011) ? 1: 0; // 读寄存器模式
+    assign INS_FETCH = (Q == 3'b000) ? 1: 0; // 取指模式
+    assign READ_MEM = (Q == 3'b010) ? 1: 0; // 读存储器模式
+    assign WRITE_MEM = (Q == 3'b001) ? 1: 0; // 写存储器模式
 
 
     assign NOP = (IR7_IR4 == 4'b0000 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
@@ -100,50 +100,330 @@ module ver1 (
         if (CLR == 0 ) begin
             ST0 <= 1'b0;
         end
-        else if (SST0) begin // st0_set_condition �� ST0=0 ���ض���������ʱΪ��
+        else if (SST0) begin // ST0 为 0 且满足置位条件时置 1
             ST0 <= 1'b1;
         end
         else if(ST0 && W2 && WRITE_REG)begin
     ST0 <=1'b0;
     end
-        // ע��: ST0 �����Զ���1��ת��0�����Ǳ�CLR��λ��
-        // �����ҪST0��ĳЩ�����´�1�ص�0����Ҫ������߼���
-        // ����ԭʼ���룬ST0 ��0��1��ͱ��֡�
+        // 注意：ST0 主要由 CLR 复位，由 SST0 置位。
+        // 如需在其他条件下从 1 回到 0，需要补充相应逻辑。
+        // 当前保留原有状态转换方式。
     end
     assign SST0 = (ST0 == 1'b0) && (
-               (SWC_SWB_SWA == 3'b100 && W2) || // д�Ĵ���ģʽ��W2��Ч
-               (SWC_SWB_SWA == 3'b010 && W1) || // ���洢��ģʽ��W1��Ч
-               (SWC_SWB_SWA == 3'b001 && W1) || // д�洢��ģʽ��W1��Ч
+               (SWC_SWB_SWA == 3'b100 && W2) || // 写寄存器模式，W2 有效
+               (SWC_SWB_SWA == 3'b010 && W1) || // 读存储器模式，W1 有效
+               (SWC_SWB_SWA == 3'b001 && W1) || // 写存储器模式，W1 有效
                (SWC_SWB_SWA == 3'b000 && W2)
            );
 
-    assign SBUS = ((WRITE_REG ||(READ_MEM && !ST0) || WRITE_MEM ) && W1) || (WRITE_REG && W2) ||((INS_FETCH && !ST0) && W2);
-    assign SEL[3] = ((WRITE_REG && (W1 || W2)) && ST0) || (READ_REG && W2);
-    assign SEL[2] = WRITE_REG && W2;
-    assign SEL[1] = (WRITE_REG && ((W1 && !ST0) || (W2 && ST0))) || (READ_REG && W2);
-    assign SEL[0] = (WRITE_REG && W1) || (READ_REG && (W1 || W2));
-    assign SELCTL = ((WRITE_REG || READ_REG) && (W1 || W2)) || ((READ_MEM || WRITE_MEM) && W1);
-    assign DRW = (WRITE_REG && (W1 || W2)) || ((ADD || SUB || AND || INC) && W1) || ((NOT || MOV || DEC) && W2) || (LD && W2);
-    assign STOP = ((WRITE_REG || READ_REG) && (W1 || W2)) || ((READ_MEM || WRITE_MEM) && W1) || (STP && W1) || (INS_FETCH && !ST0 && W1);
-    assign LAR = ((READ_MEM || WRITE_MEM) && W1 && !ST0)||((ST || LD) && W1);
-    assign SHORT = ((READ_MEM || WRITE_MEM) && W1) || ((NOP || ADD || SUB || AND || INC || (JC && !C) || (JZ && !Z)) && W1);
-    assign MBUS = (READ_MEM && W1 && ST0) || (LD && W2);
-    assign ARINC = (WRITE_MEM || READ_MEM) && W1 && ST0;
-    assign MEMW = (WRITE_MEM && W1 && ST0) || (ST && W2);
-    assign PCINC = ((NOP || ADD || SUB || AND || INC || (JC && !C) || (JZ && !Z) || OUT || MOV || CMP || NOT || DEC) && W1) || ((LD || ST || JMP || (JC && C) || (JZ && Z)) && W2);
-    assign LIR = ((NOP || ADD || SUB || AND || INC || (JC && !C) || (JZ && !Z) || OUT || MOV || CMP || NOT || DEC) && W1) || ((LD || ST || JMP || (JC && C) || (JZ && Z)) && W2);
-    assign CIN = (ADD && W1) || (DEC && W2);
-    assign ABUS = ((ADD || SUB || AND || INC || LD || ST || JMP) && W1) || (ST && W2) || ((MOV || OUT || CMP || NOT || DEC) && W2);
-    assign LDZ = ((ADD || SUB || AND || INC) && W1) || ((CMP || DEC) && W2);
-    assign LDC = ((SUB || INC) && W1) || ((CMP || NOT || DEC) && W2);
-    assign M = ((AND || LD || ST || JMP) && W1) || (ST && W2) || ((NOT || MOV || OUT) && W2);
-    assign S[3] = ((ADD || AND || LD || ST || JMP) && W1) || (ST && W2) || ((OUT || MOV || DEC) && W2) ;
-    assign S[2] = ((SUB || ST || JMP) && W1) || ((CMP || DEC) && W2);
-    assign S[1] = ((SUB || AND || LD || ST || JMP) && W1) || (ST && W2) || ((OUT || CMP || MOV || DEC) && W2);
-    assign S[0] = ((ADD || AND || ST || JMP) && W1) || (DEC && W2);
-    assign LPC  = (JMP && W1) || (INS_FETCH && !ST0 && W2);
-    assign LONG = (LD || ST || JMP || (JC && C) || (JZ && Z)) && W1;
-    assign PCADD = ((C && JC) || (Z && JZ)) && W1;
+    always @(*) begin
+        SELCTL = 1'b0;
+        ABUS = 1'b0;
+        SBUS = 1'b0;
+        MBUS = 1'b0;
+        M = 1'b0;
+        CIN = 1'b0;
+        DRW = 1'b0;
+        LDZ = 1'b0;
+        LDC = 1'b0;
+        MEMW = 1'b0;
+        ARINC = 1'b0;
+        PCINC = 1'b0;
+        PCADD = 1'b0;
+        LPC = 1'b0;
+        LAR = 1'b0;
+        LIR = 1'b0;
+        STOP = 1'b0;
+        SHORT = 1'b0;
+        LONG = 1'b0;
+        S = 4'b0000;
+        SEL = 4'b0000;
+
+        case (1'b1)
+            WRITE_REG: begin
+                if (W1) begin
+                    SBUS = 1'b1;
+                    SELCTL = 1'b1;
+                    DRW = 1'b1;
+                    STOP = 1'b1;
+                    SEL[0] = 1'b1;
+                    SEL[1] = !ST0;
+                    SEL[3] = ST0;
+                end
+                if (W2) begin
+                    SBUS = 1'b1;
+                    SELCTL = 1'b1;
+                    DRW = 1'b1;
+                    STOP = 1'b1;
+                    SEL[1] = ST0;
+                    SEL[2] = 1'b1;
+                    SEL[3] = ST0;
+                end
+            end
+            READ_REG: begin
+                if (W1) begin
+                    SELCTL = 1'b1;
+                    STOP = 1'b1;
+                    SEL[0] = 1'b1;
+                end
+                if (W2) begin
+                    SELCTL = 1'b1;
+                    STOP = 1'b1;
+                    SEL[0] = 1'b1;
+                    SEL[1] = 1'b1;
+                    SEL[3] = 1'b1;
+                end
+            end
+            READ_MEM: begin
+                if (W1) begin
+                    SBUS = !ST0;
+                    SELCTL = 1'b1;
+                    STOP = 1'b1;
+                    LAR = !ST0;
+                    SHORT = 1'b1;
+                    MBUS = ST0;
+                    ARINC = ST0;
+                end
+            end
+            WRITE_MEM: begin
+                if (W1) begin
+                    SBUS = 1'b1;
+                    SELCTL = 1'b1;
+                    STOP = 1'b1;
+                    LAR = !ST0;
+                    SHORT = 1'b1;
+                    ARINC = ST0;
+                    MEMW = ST0;
+                end
+            end
+            INS_FETCH: begin
+                if (!ST0) begin
+                    if (W1) begin
+                        STOP = 1'b1;
+                    end
+                    if (W2) begin
+                        SBUS = 1'b1;
+                        LPC = 1'b1;
+                    end
+                end
+                else begin
+                    case (IR7_IR4)
+                        4'b0000: begin
+                            if (W1) begin
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                        end
+                        4'b0001: begin
+                            if (W1) begin
+                                DRW = 1'b1;
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                                CIN = 1'b1;
+                                ABUS = 1'b1;
+                                LDZ = 1'b1;
+                                S[3] = 1'b1;
+                                S[0] = 1'b1;
+                            end
+                        end
+                        4'b0010: begin
+                            if (W1) begin
+                                DRW = 1'b1;
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                                ABUS = 1'b1;
+                                LDZ = 1'b1;
+                                LDC = 1'b1;
+                                S[2] = 1'b1;
+                                S[1] = 1'b1;
+                            end
+                        end
+                        4'b0011: begin
+                            if (W1) begin
+                                DRW = 1'b1;
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                                ABUS = 1'b1;
+                                LDZ = 1'b1;
+                                M = 1'b1;
+                                S[3] = 1'b1;
+                                S[1] = 1'b1;
+                                S[0] = 1'b1;
+                            end
+                        end
+                        4'b0100: begin
+                            if (W1) begin
+                                DRW = 1'b1;
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                                ABUS = 1'b1;
+                                LDZ = 1'b1;
+                                LDC = 1'b1;
+                            end
+                        end
+                        4'b0101: begin
+                            if (W1) begin
+                                LAR = 1'b1;
+                                ABUS = 1'b1;
+                                M = 1'b1;
+                                S[3] = 1'b1;
+                                S[1] = 1'b1;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin
+                                DRW = 1'b1;
+                                MBUS = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                        end
+                        4'b0110: begin
+                            if (W1) begin
+                                LAR = 1'b1;
+                                ABUS = 1'b1;
+                                M = 1'b1;
+                                S = 4'b1111;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin
+                                MEMW = 1'b1;
+                                ABUS = 1'b1;
+                                M = 1'b1;
+                                S[3] = 1'b1;
+                                S[1] = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                        end
+                        4'b0111: begin
+                            if (W1) begin
+                                if (!C) begin
+                                    SHORT = 1'b1;
+                                    PCINC = 1'b1;
+                                    LIR = 1'b1;
+                                end
+                                else begin
+                                    LONG = 1'b1;
+                                    PCADD = 1'b1;
+                                end
+                            end
+                            if (W2 && C) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                        end
+                        4'b1000: begin
+                            if (W1) begin
+                                if (!Z) begin
+                                    SHORT = 1'b1;
+                                    PCINC = 1'b1;
+                                    LIR = 1'b1;
+                                end
+                                else begin
+                                    LONG = 1'b1;
+                                    PCADD = 1'b1;
+                                end
+                            end
+                            if (W2 && Z) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                        end
+                        4'b1001: begin
+                            if (W1) begin
+                                LPC = 1'b1;
+                                ABUS = 1'b1;
+                                M = 1'b1;
+                                S[3] = 1'b1;
+                                S[2] = 1'b1;
+                                S[1] = 1'b1;
+                                LONG = 1'b1;
+                            end
+                            if (W2) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                        end
+                        4'b1010: begin
+                            if (W1) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                            if (W2) begin
+                                ABUS = 1'b1;
+                                M = 1'b1;
+                                S[3] = 1'b1;
+                                S[1] = 1'b1;
+                            end
+                        end
+                        4'b1011: begin
+                            if (W1) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                            if (W2) begin
+                                DRW = 1'b1;
+                                ABUS = 1'b1;
+                                M = 1'b1;
+                                S[3] = 1'b1;
+                                S[1] = 1'b1;
+                            end
+                        end
+                        4'b1100: begin
+                            if (W1) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                            if (W2) begin
+                                ABUS = 1'b1;
+                                LDZ = 1'b1;
+                                LDC = 1'b1;
+                                S[2] = 1'b1;
+                                S[1] = 1'b1;
+                            end
+                        end
+                        4'b1101: begin
+                            if (W1) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                            if (W2) begin
+                                DRW = 1'b1;
+                                ABUS = 1'b1;
+                                LDC = 1'b1;
+                                M = 1'b1;
+                            end
+                        end
+                        4'b1110: begin
+                            if (W1) begin
+                                STOP = 1'b1;
+                            end
+                        end
+                        4'b1111: begin
+                            if (W1) begin
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
+                            end
+                            if (W2) begin
+                                DRW = 1'b1;
+                                CIN = 1'b1;
+                                ABUS = 1'b1;
+                                LDZ = 1'b1;
+                                LDC = 1'b1;
+                                S = 4'b1111;
+                            end
+                        end
+                    endcase
+                end
+            end
+        endcase
+    end
 
 endmodule
 
