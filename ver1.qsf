@@ -93,4 +93,3 @@ set_location_assignment PIN_23 -to TMS
 set_global_assignment -name MISC_FILE "E:/ver1/ver1.dpf"
 set_location_assignment PIN_12 -to W1
 set_location_assignment PIN_15 -to W2
-set_location_assignment PIN_16 -to W3
