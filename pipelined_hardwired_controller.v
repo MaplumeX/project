@@ -45,32 +45,15 @@ module pipelined_hardwired_controller (
     wire READ_MEM;
     wire WRITE_MEM;
 
-    // 指令译码线。
-    // 这些信号把 IR7_IR4 翻译成语义化的指令名，便于观察和后续扩展；
-    // 当前主控制输出仍直接在 case (IR7_IR4) 中按编码生成。
-    // 原有指令译码
-    wire NOP;
-    wire ADD;
-    wire SUB;
-    wire AND;
-    wire INC;
-    wire LD;
-    wire ST;
-    wire JC;
-    wire JZ;
-    wire JMP;
-    wire STP;
-    // 新增指令译码
-    wire OUT;
-    wire MOV;
-    wire CMP;
-    wire NOT;
-    wire DEC;
-
 	// 在每个 T3 下降沿采样模式开关，将有效模式写入 Q。
+	// CLR 低电平复位时将 Q 清零，避免复位后模式译码命中错误工作模式。
 	// 未定义的开关组合统一归入 3'b111，后续不会命中任何工作模式。
-	always @(negedge T3)
-	begin 
+	always @(negedge T3 or negedge CLR)
+	begin
+		if (!CLR) begin
+			Q = 3'b000;
+		end
+		else begin
 			case  (SWC_SWB_SWA)
 				3'b100:  Q=3'b100;
 				3'b011:  Q=3'b011;
@@ -78,9 +61,9 @@ module pipelined_hardwired_controller (
 				3'b010:  Q=3'b010;
 				3'b001:  Q=3'b001;
 			    default:
-			             Q=3'b111; 
-			 endcase 
-			     
+			             Q=3'b111;
+			 endcase
+		end
 	end			
     // 工作模式译码：每个信号对应流程图中的一个入口分支。
     assign WRITE_REG = (Q == 3'b100) ? 1: 0;
@@ -88,26 +71,6 @@ module pipelined_hardwired_controller (
     assign INS_FETCH = (Q == 3'b000) ? 1: 0; // 取指模式
     assign READ_MEM = (Q == 3'b010) ? 1: 0; // 读存储器模式
     assign WRITE_MEM = (Q == 3'b001) ? 1: 0; // 写存储器模式
-
-
-    // 指令译码只在取指/执行模式且 ST0=1 时有效，避免手动模式误触发指令控制。
-    assign NOP = (IR7_IR4 == 4'b0000 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign ADD = (IR7_IR4 == 4'b0001 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign SUB = (IR7_IR4 == 4'b0010 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign AND = (IR7_IR4 == 4'b0011 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign INC = (IR7_IR4 == 4'b0100 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign LD = (IR7_IR4 == 4'b0101 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign ST = (IR7_IR4 == 4'b0110 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign JC = (IR7_IR4 == 4'b0111 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign JZ = (IR7_IR4 == 4'b1000 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign JMP = (IR7_IR4 == 4'b1001 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign STP = (IR7_IR4 == 4'b1110 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-
-    assign OUT = (IR7_IR4 == 4'b1010 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign MOV = (IR7_IR4 == 4'b1011 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign CMP = (IR7_IR4 == 4'b1100 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign NOT = (IR7_IR4 == 4'b1101 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
-    assign DEC = (IR7_IR4 == 4'b1111 && INS_FETCH == 1 && ST0 == 1) ? 1: 0;
 
 
     // ST0 状态更新逻辑：
@@ -130,11 +93,13 @@ module pipelined_hardwired_controller (
     end
     // SST0 是 ST0 的置位条件。
     // 不同模式进入第二阶段所需的节拍不同：写寄存器使用 W2，读/写存储器和取指使用 W1。
+    // 注意：SST0 与模式译码一致使用锁存后的 Q，而非原始开关 SWC_SWB_SWA，
+    // 避免切换开关瞬间 SST0 与当前模式不匹配导致 ST0 在错误模式下被置位。
     assign SST0 = (ST0 == 1'b0) && (
-               (SWC_SWB_SWA == 3'b100 && W2) || // 写寄存器模式，W2 有效
-               (SWC_SWB_SWA == 3'b010 && W1) || // 读存储器模式，W1 有效
-               (SWC_SWB_SWA == 3'b001 && W1) || // 写存储器模式，W1 有效
-               (SWC_SWB_SWA == 3'b000 && W1)
+               (Q == 3'b100 && W2) || // 写寄存器模式，W2 有效
+               (Q == 3'b010 && W1) || // 读存储器模式，W1 有效
+               (Q == 3'b001 && W1) || // 写存储器模式，W1 有效
+               (Q == 3'b000 && W1)
            );
 
     // 主控制组合逻辑。
@@ -369,50 +334,46 @@ module pipelined_hardwired_controller (
                             end
                         end
                         4'b1010: begin // OUT：将源寄存器内容经 ALU/ABUS 输出到外部总线。
-                            if (W1) begin // 长周期第 1 拍：把源寄存器内容经 ALU 送到 ABUS。
+                            if (W1) begin // 短周期：源寄存器经 ALU 送 ABUS，同时取下一条指令。
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1010;
                             end
-                            if (W2) begin // 长周期第 2 拍：取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
                         end
                         4'b1011: begin // MOV：源寄存器经 ABUS 写回目的寄存器。
-                            if (W1) begin // 长周期第 1 拍：把源寄存器内容经 ABUS 写入目的寄存器。
+                            if (W1) begin // 短周期：源寄存器经 ABUS 写入目的寄存器，同时取下一条指令。
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                                 DRW = 1'b1;
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1010;
                             end
-                            if (W2) begin // 长周期第 2 拍：取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
                         end
                         4'b1100: begin // CMP：执行减法比较，只更新 Z/C，不写回寄存器。
-                            if (W1) begin // 长周期第 1 拍：执行减法比较，只锁存标志位。
+                            if (W1) begin // 短周期：减法比较只锁存标志位，同时取下一条指令。
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
                                 S = 4'b0110;
                             end
-                            if (W2) begin // 长周期第 2 拍：取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
                         end
                         4'b1101: begin // NOT：执行按位取反并写回寄存器。
-                            if (W1) begin // 长周期第 1 拍：执行取反，结果经 ABUS 写回寄存器。
+                            if (W1) begin // 短周期：取反结果经 ABUS 写回寄存器，同时取下一条指令。
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                                 DRW = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 M = 1'b1;
-                            end
-                            if (W2) begin // 长周期第 2 拍：取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                         4'b1110: begin // STP：停机，拉高 STOP 保持暂停状态。
@@ -421,17 +382,16 @@ module pipelined_hardwired_controller (
                             end
                         end
                         4'b1111: begin // DEC：执行自减并写回寄存器，同时更新 Z/C。
-                            if (W1) begin // 长周期第 1 拍：执行自减，结果写回寄存器并更新标志位。
+                            if (W1) begin // 短周期：自减结果写回寄存器并更新标志位，同时取下一条指令。
+                                SHORT = 1'b1;
+                                PCINC = 1'b1;
+                                LIR = 1'b1;
                                 DRW = 1'b1;
                                 CIN = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
                                 S = 4'b1111;
-                            end
-                            if (W2) begin // 长周期第 2 拍：取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                     endcase
