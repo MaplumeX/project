@@ -31,7 +31,6 @@ module pipelined_hardwired_controller (
         output reg LIR,                    // IR 装载控制信号
         output reg STOP,                   // 停机/暂停控制信号
         output reg SHORT,                  // 短周期控制信号
-        output reg LONG,                   // 长周期控制信号
         output reg [3:0] S, SEL            // S 为 ALU 功能选择，SEL 为寄存器选择
     );
     // ST0 是控制器内部阶段标志：
@@ -160,7 +159,6 @@ module pipelined_hardwired_controller (
         LIR = 1'b0;
         STOP = 1'b0;
         SHORT = 1'b0;
-        LONG = 1'b0;
         S = 4'b0000;
         SEL = 4'b0000;
 
@@ -301,7 +299,6 @@ module pipelined_hardwired_controller (
                                 M = 1'b1;
                                 S[3] = 1'b1;
                                 S[1] = 1'b1;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：存储器数据经 MBUS 写回寄存器，并取下一条指令。
                                 DRW = 1'b1;
@@ -316,7 +313,6 @@ module pipelined_hardwired_controller (
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1111;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：寄存器数据经 ABUS 写入存储器，并取下一条指令。
                                 MEMW = 1'b1;
@@ -336,7 +332,6 @@ module pipelined_hardwired_controller (
                                     LIR = 1'b1;
                                 end
                                 else begin
-                                    LONG = 1'b1;
                                     PCADD = 1'b1;
                                 end
                             end
@@ -353,7 +348,6 @@ module pipelined_hardwired_controller (
                                     LIR = 1'b1;
                                 end
                                 else begin
-                                    LONG = 1'b1;
                                     PCADD = 1'b1;
                                 end
                             end
@@ -368,7 +362,6 @@ module pipelined_hardwired_controller (
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1111;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：跳转后继续取下一条指令。
                                 PCINC = 1'b1;
@@ -380,7 +373,6 @@ module pipelined_hardwired_controller (
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1010;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：取下一条指令。
                                 PCINC = 1'b1;
@@ -393,7 +385,6 @@ module pipelined_hardwired_controller (
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1010;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：取下一条指令。
                                 PCINC = 1'b1;
@@ -406,7 +397,6 @@ module pipelined_hardwired_controller (
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
                                 S = 4'b0110;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：取下一条指令。
                                 PCINC = 1'b1;
@@ -419,7 +409,6 @@ module pipelined_hardwired_controller (
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 M = 1'b1;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：取下一条指令。
                                 PCINC = 1'b1;
@@ -439,7 +428,6 @@ module pipelined_hardwired_controller (
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
                                 S = 4'b1111;
-                                LONG = 1'b1;
                             end
                             if (W2) begin // 长周期第 2 拍：取下一条指令。
                                 PCINC = 1'b1;
