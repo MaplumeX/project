@@ -29,3 +29,5 @@
 # Simulation and waveform output
 *.vcd
 *.vwf
+
+.pi-subagents/artifacts/
