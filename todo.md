@@ -1,7 +1,9 @@
 mov √
 
-outx(?)
+DEC √
 
 cmp √
 
 not √
+
+out 删

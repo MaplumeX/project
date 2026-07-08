@@ -102,6 +102,50 @@ module pipelined_hardwired_controller (
                (Q == 3'b000 && W1)
            );
 
+    // PCINC / LIR 时序化驱动（解决 TEC-8 吞指令问题）。
+    // 原组合逻辑中 LIR 与 PCINC 在同一节拍同时拉高，但二者到 PC 计数器、IR 寄存器的
+    // 布线/门延时不一致，在 TEC-8 实验台上出现“PCINC 先于 LIR 生效 → PC 先 +1 →
+    // 存储器地址已变 → LIR 锁存到的是下下条指令”的反序触发，从而吞掉一条指令。
+    // 这里改为在 T3 上升沿用寄存器同步锁存，且 PCINC、LIR 取完全相同的表达式，
+    // 保证两者在 PC/IR 的响应沿（下降沿）之前已稳定且严格同步，消除反序触发。
+    // 启动拍（INS_FETCH && !ST0 && W1）只装 PC，不取指；ST0=1 后按指令类型取指：
+    //   短指令（含条件跳转不成立）在 W1 取指；
+    //   长指令及条件跳转成立/无条件跳转在 W2 取指。
+    // 参考 TEC-8 实测可行实现：github.com/xqmmcqs/nobugCPU (nobugCPU-pipe.vhd)。
+    wire FETCH;
+    assign FETCH = (INS_FETCH && ST0) && (
+               (W1 && (
+                   (IR7_IR4 == 4'b0000) || // NOP
+                   (IR7_IR4 == 4'b0001) || // ADD
+                   (IR7_IR4 == 4'b0010) || // SUB
+                   (IR7_IR4 == 4'b0011) || // AND
+                   (IR7_IR4 == 4'b0100) || // INC
+                   (IR7_IR4 == 4'b0111 && !C) || // JC 不跳转
+                   (IR7_IR4 == 4'b1000 && !Z) || // JZ 不跳转
+                   (IR7_IR4 == 4'b1011) || // MOV
+                   (IR7_IR4 == 4'b1100) || // CMP
+                   (IR7_IR4 == 4'b1101) || // NOT
+                   (IR7_IR4 == 4'b1111)    // DEC
+               )) ||
+               (W2 && (
+                   (IR7_IR4 == 4'b0101) || // LD
+                   (IR7_IR4 == 4'b0110) || // ST
+                   (IR7_IR4 == 4'b0111 && C) || // JC 跳转成立
+                   (IR7_IR4 == 4'b1000 && Z) || // JZ 跳转成立
+                   (IR7_IR4 == 4'b1001)    // JMP
+               ))
+           );
+    always @(posedge T3 or negedge CLR) begin
+        if (!CLR) begin
+            PCINC <= 1'b0;
+            LIR   <= 1'b0;
+        end
+        else begin
+            PCINC <= FETCH;
+            LIR   <= FETCH;
+        end
+    end
+
     // 主控制组合逻辑。
     // 在命中的模式、指令和节拍中拉高需要的控制信号，各 case 分支已完整覆盖所有输出。
     always @(*) begin
@@ -118,11 +162,11 @@ module pipelined_hardwired_controller (
         LDC    = 1'b0;
         MEMW   = 1'b0;
         ARINC  = 1'b0;
-        PCINC  = 1'b0;
+        // PCINC / LIR 不在此组合块中赋值：改为下面的 T3 上升沿寄存器同步锁存，
+        // 见该时序块注释说明。
         PCADD  = 1'b0;
         LPC    = 1'b0;
         LAR    = 1'b0;
-        LIR    = 1'b0;
         STOP   = 1'b0;
         SHORT  = 1'b0;
         S      = 4'b0000;
@@ -189,9 +233,10 @@ module pipelined_hardwired_controller (
                 if (!ST0) begin
                     // 任意修改 PC 指针：仅在开始的一个 W1 内完成。
                     // 用 SHORT 把本周期压成单拍，避免 SST0 在 W1 就把 ST0 翻 1 后
-                    // 与同一周期的 W2 取指发生冲突。本拍不取指（无 LIR），
+                    // 与同一周期的 W2 取指发生冲突。本拍不取指（FETCH 不命中），
                     // 第一条指令的取指交给下一周期（ST0=1）的自然 NOP 流程：
-                    // 复位后 IR=00H=NOP，NOP 分支会输出 LIR+PCINC。
+                    // 复位后 IR=00H=NOP，进入 ST0=1 后 FETCH 在 W1 命中，
+                    // 由 T3 上升沿同步锁存 LIR/PCINC 完成取指。
                     if (W1) begin
                         SBUS = 1'b1;
                         LPC = 1'b1;
@@ -205,16 +250,12 @@ module pipelined_hardwired_controller (
                         4'b0000: begin // NOP：空操作，只完成取下一条指令。
                             if (W1) begin // 短周期：PC 加 1，并把下一条指令装入 IR。
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                         4'b0001: begin // ADD：执行加法，结果写回寄存器并更新 Z/C 标志。
                             if (W1) begin // 短周期：ALU 加法结果经 ABUS 写回，同时取下一条指令。
                                 DRW = 1'b1;
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 CIN = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
@@ -226,8 +267,6 @@ module pipelined_hardwired_controller (
                             if (W1) begin // 短周期：ALU 减法结果经 ABUS 写回，同时取下一条指令。
                                 DRW = 1'b1;
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
@@ -238,8 +277,6 @@ module pipelined_hardwired_controller (
                             if (W1) begin // 短周期：逻辑运算结果经 ABUS 写回，同时取下一条指令。
                                 DRW = 1'b1;
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 M = 1'b1;
@@ -250,8 +287,6 @@ module pipelined_hardwired_controller (
                             if (W1) begin // 短周期：ALU 自增结果经 ABUS 写回，同时取下一条指令。
                                 DRW = 1'b1;
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
@@ -267,8 +302,6 @@ module pipelined_hardwired_controller (
                             if (W2) begin // 长周期第 2 拍：存储器数据经 MBUS 写回寄存器，并取下一条指令。
                                 DRW = 1'b1;
                                 MBUS = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                         4'b0110: begin // ST：先形成访存地址，再将寄存器数据写入存储器。
@@ -283,40 +316,30 @@ module pipelined_hardwired_controller (
                                 ABUS = 1'b1;
                                 M = 1'b1;
                                 S = 4'b1010;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                         4'b0111: begin // JC：C=1 时执行 PC 相对跳转，否则顺序取下一条指令。
                             if (W1) begin // 第 1 拍判断 C：不跳转走短周期，跳转则启动 PCADD 长周期。
                                 if (!C) begin
                                     SHORT = 1'b1;
-                                    PCINC = 1'b1;
-                                    LIR = 1'b1;
                                 end
                                 else begin
                                     PCADD = 1'b1;
                                 end
                             end
                             if (W2 && C) begin // 条件满足后的第 2 拍：跳转后继续取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                         4'b1000: begin // JZ：Z=1 时执行 PC 相对跳转，否则顺序取下一条指令。
                             if (W1) begin // 第 1 拍判断 Z：不跳转走短周期，跳转则启动 PCADD 长周期。
                                 if (!Z) begin
                                     SHORT = 1'b1;
-                                    PCINC = 1'b1;
-                                    LIR = 1'b1;
                                 end
                                 else begin
                                     PCADD = 1'b1;
                                 end
                             end
                             if (W2 && Z) begin // 条件满足后的第 2 拍：跳转后继续取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                             end
                         end
                         4'b1001: begin // JMP：无条件跳转，将目标地址装入 PC。
@@ -327,25 +350,11 @@ module pipelined_hardwired_controller (
                                 S = 4'b1111;
                             end
                             if (W2) begin // 长周期第 2 拍：跳转后继续取下一条指令。
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                            end
-                        end
-                        4'b1010: begin // OUT：将源寄存器内容经 ALU/ABUS 输出到外部总线。
-                            if (W1) begin // 短周期：源寄存器经 ALU 送 ABUS，同时取下一条指令。
-                                SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
-                                ABUS = 1'b1;
-                                M = 1'b1;
-                                S = 4'b1010;
                             end
                         end
                         4'b1011: begin // MOV：源寄存器经 ABUS 写回目的寄存器。
                             if (W1) begin // 短周期：源寄存器经 ABUS 写入目的寄存器，同时取下一条指令。
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 DRW = 1'b1;
                                 ABUS = 1'b1;
                                 M = 1'b1;
@@ -355,8 +364,6 @@ module pipelined_hardwired_controller (
                         4'b1100: begin // CMP：执行减法比较，只更新 Z/C，不写回寄存器。
                             if (W1) begin // 短周期：减法比较只锁存标志位，同时取下一条指令。
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
                                 LDC = 1'b1;
@@ -366,8 +373,6 @@ module pipelined_hardwired_controller (
                         4'b1101: begin // NOT：执行按位取反并写回寄存器。
                             if (W1) begin // 短周期：取反结果经 ABUS 写回寄存器，同时取下一条指令。
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 DRW = 1'b1;
                                 ABUS = 1'b1;
                                 LDZ = 1'b1;
@@ -384,8 +389,6 @@ module pipelined_hardwired_controller (
                         4'b1111: begin // DEC：执行自减并写回寄存器，同时更新 Z/C。
                             if (W1) begin // 短周期：自减结果写回寄存器并更新标志位，同时取下一条指令。
                                 SHORT = 1'b1;
-                                PCINC = 1'b1;
-                                LIR = 1'b1;
                                 DRW = 1'b1;
                                 CIN = 1'b1;
                                 ABUS = 1'b1;
