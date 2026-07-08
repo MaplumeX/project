@@ -105,6 +105,29 @@ module pipelined_hardwired_controller (
     // 主控制组合逻辑。
     // 在命中的模式、指令和节拍中拉高需要的控制信号，各 case 分支已完整覆盖所有输出。
     always @(*) begin
+        // 关键：先给所有输出赋默认值（0），避免组合逻辑在某些分支未赋值时
+        // 生成 latch，导致信号跨周期残留、污染取指时序（吞指令的根因）。
+        SELCTL = 1'b0;
+        ABUS   = 1'b0;
+        SBUS   = 1'b0;
+        MBUS   = 1'b0;
+        M      = 1'b0;
+        CIN    = 1'b0;
+        DRW    = 1'b0;
+        LDZ    = 1'b0;
+        LDC    = 1'b0;
+        MEMW   = 1'b0;
+        ARINC  = 1'b0;
+        PCINC  = 1'b0;
+        PCADD  = 1'b0;
+        LPC    = 1'b0;
+        LAR    = 1'b0;
+        LIR    = 1'b0;
+        STOP   = 1'b0;
+        SHORT  = 1'b0;
+        S      = 4'b0000;
+        SEL    = 4'b0000;
+
         case (1'b1)
             WRITE_REG: begin // 手动写寄存器：通过 SBUS 将开关数据写入指定寄存器。
                 if (W1) begin // 第一个写入节拍，根据 ST0 选择低位或高位寄存器组。
